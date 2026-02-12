@@ -28,7 +28,7 @@
         /* Player */
         .player-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #181818; padding: 15px; border-top: 1px solid #282828; }
         audio { width: 100%; height: 35px; outline: none; }
-        #status { text-align: center; color: #888; padding: 20px; font-size: 12px; }
+        #status { text-align: center; color: #888; padding: 20px; font-size: 12px; display: none; }
     </style>
 </head>
 <body>
@@ -43,7 +43,7 @@
         <button class="go-btn" onclick="startSearch()">GO</button>
     </div>
 
-    <div id="status">Ready to search.</div>
+    <div id="status"></div>
     <div id="searchResults" class="list"></div>
 
     <div class="player-bar">
@@ -51,55 +51,48 @@
     </div>
 
     <script>
-        // --- THE MEGA SERVER LIST ---
-        // If one fails, it instantly tries the next.
+        // --- THE PROXY FIX ---
+        // We use 'allorigins' to bypass the browser security block (CORS)
+        const PROXY_URL = "https://api.allorigins.win/raw?url=";
+
         const SERVERS = [
             "https://pipedapi.kavin.rocks",
-            "https://pipedapi.tokhmi.xyz",
             "https://api.piped.privacy.com.de",
             "https://pipedapi.drgns.space",
+            "https://pipedapi.tokhmi.xyz",
             "https://pipedapi.smnz.de",
-            "https://pipedapi.moomoo.me",
             "https://pipedapi.leptons.xyz",
             "https://pipedapi.r4fo.com",
             "https://api.piped.projectsegfau.lt",
-            "https://pipedapi.ducks.party",
             "https://pipedapi.lunar.icu",
-            "https://pipedapi.osh.ink",
-            "https://pipedapi.adminforge.de",
-            "https://pipedapi.aeong.one",
-            "https://piped-api.lunar.icu",
-            "https://pipedapi.kavin.rocks", 
-            "https://pa.il.ax",
-            "https://p.ocv.me",
-            "https://api-piped.mha.fi"
+            "https://pipedapi.osh.ink"
         ];
 
         let currentServerIndex = 0;
 
         async function fetchFromPiped(endpoint) {
             let status = document.getElementById('status');
-            
-            // Loop through servers until one works
+            status.style.display = 'block';
+
+            // Loop through servers
             for (let i = 0; i < SERVERS.length; i++) {
                 let server = SERVERS[(currentServerIndex + i) % SERVERS.length];
-                try {
-                    status.innerText = `Trying server ${i+1}/${SERVERS.length}...`;
-                    
-                    // Set a 3-second timeout so we don't wait forever on a dead server
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3000);
-                    
-                    let res = await fetch(server + endpoint, { signal: controller.signal });
-                    clearTimeout(timeoutId);
+                
+                // --- THE MAGIC LINE ---
+                // We wrap the URL in the proxy so the browser allows it
+                let targetUrl = PROXY_URL + encodeURIComponent(server + endpoint);
 
+                try {
+                    status.innerText = `Connecting to server ${i+1}...`;
+                    
+                    let res = await fetch(targetUrl);
                     if (res.ok) {
-                        currentServerIndex = (currentServerIndex + i) % SERVERS.length; // Remember this good server
-                        status.innerText = "Connected!";
+                        currentServerIndex = (currentServerIndex + i) % SERVERS.length; 
+                        status.style.display = 'none';
                         return await res.json();
                     }
                 } catch (e) {
-                    console.log(`Server ${server} failed, skipping...`);
+                    console.log("Proxy failed for " + server);
                 }
             }
             throw new Error("All servers failed");
@@ -109,15 +102,13 @@
             let q = document.getElementById('query').value;
             if(!q) return;
             
-            document.getElementById('status').style.display = 'block';
             document.getElementById('searchResults').innerHTML = '';
 
             try {
                 let data = await fetchFromPiped('/search?q=' + encodeURIComponent(q) + '&filter=music_songs');
                 renderList(data.items);
-                document.getElementById('status').style.display = 'none';
             } catch (err) {
-                document.getElementById('status').innerText = "All 20 servers failed. Check your WiFi/Data.";
+                document.getElementById('status').innerText = "Error: Could not connect to music servers.";
             }
         }
 
@@ -149,8 +140,10 @@
             
             try {
                 let data = await fetchFromPiped('/streams/' + id);
+                
                 let audioUrl = "";
                 let m4a = data.audioStreams.find(s => s.format === 'M4A');
+                
                 if (m4a) audioUrl = m4a.url;
                 else if (data.audioStreams.length > 0) audioUrl = data.audioStreams[0].url;
 
@@ -162,7 +155,7 @@
                     alert("No audio stream found.");
                 }
             } catch (e) {
-                alert("Could not load song. Try another.");
+                alert("Could not load song.");
             }
             player.style.opacity = "1";
         }
