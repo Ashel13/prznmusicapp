@@ -7,7 +7,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_123')
 
 # --- CONFIGURATION ---
 # Current working API
-PIPED_API_URL = "https://pipedapi.tokhmi.xyz"
+PIPED_API_URL = "https://pipedapi.kavin.rocks"
 
 USERS = {
     "prazoon": "king123",
@@ -85,3 +85,4 @@ def get_stream():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
