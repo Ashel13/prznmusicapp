@@ -51,32 +51,40 @@
     </div>
 
     <script>
-        // --- THE ENGINE LIST (Your browser tries these directly) ---
+        // --- THE SUPER LIST ---
+        // Your phone will try ALL of these until one works.
         const SERVERS = [
             "https://pipedapi.kavin.rocks",
-            "https://pipedapi.tokhmi.xyz",
             "https://api.piped.privacy.com.de",
             "https://pipedapi.drgns.space",
+            "https://pipedapi.tokhmi.xyz",
             "https://pipedapi.smnz.de",
-            "https://pipedapi.moomoo.me"
+            "https://pipedapi.moomoo.me",
+            "https://pipedapi.leptons.xyz",
+            "https://pipedapi.r4fo.com",
+            "https://api.piped.projectsegfau.lt",
+            "https://pipedapi.ducks.party",
+            "https://pipedapi.lunar.icu",
+            "https://pipedapi.osh.ink",
+            "https://pipedapi.adminforge.de",
+            "https://pipedapi.aeong.one"
         ];
 
         let currentServerIndex = 0;
 
-        // --- SMART FETCH FUNCTION ---
-        // Tries server 1. If it fails, tries server 2, etc.
+        // --- SMART FETCH ---
         async function fetchFromPiped(endpoint) {
+            // Loop through the list to find a working server
             for (let i = 0; i < SERVERS.length; i++) {
                 let server = SERVERS[(currentServerIndex + i) % SERVERS.length];
                 try {
-                    console.log("Trying server:", server);
                     let res = await fetch(server + endpoint);
                     if (res.ok) {
-                        currentServerIndex = (currentServerIndex + i) % SERVERS.length; 
+                        currentServerIndex = (currentServerIndex + i) % SERVERS.length; // Remember the working one
                         return await res.json();
                     }
                 } catch (e) {
-                    console.log("Server failed, trying next...");
+                    // Just ignore errors and keep trying the next server
                 }
             }
             throw new Error("All servers failed");
@@ -87,15 +95,14 @@
             if(!q) return;
             
             document.getElementById('loading').style.display = 'block';
-            document.getElementById('loading').innerText = "Searching...";
+            document.getElementById('loading').innerText = "Testing servers... (this may take 10s)";
             document.getElementById('searchResults').innerHTML = '';
 
             try {
-                // Fetch directly from Piped (Bypassing Render)
                 let data = await fetchFromPiped('/search?q=' + encodeURIComponent(q) + '&filter=music_songs');
                 renderList(data.items);
             } catch (err) {
-                document.getElementById('loading').innerText = "All servers are busy. Wait 1 min & try again.";
+                document.getElementById('loading').innerText = "Network Error: Check your connection.";
             }
             
             if(document.getElementById('searchResults').innerHTML !== "") {
@@ -125,12 +132,12 @@
 
         async function play(id) {
             let player = document.getElementById('audioPlayer');
-            player.style.opacity = "0.5"; // Dim player to show loading
+            player.style.opacity = "0.5";
             
             try {
                 let data = await fetchFromPiped('/streams/' + id);
-                
                 let audioUrl = "";
+                // Try M4A first, then others
                 let m4a = data.audioStreams.find(s => s.format === 'M4A');
                 if (m4a) audioUrl = m4a.url;
                 else if (data.audioStreams.length > 0) audioUrl = data.audioStreams[0].url;
