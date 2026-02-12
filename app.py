@@ -1,13 +1,16 @@
 import requests
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+import os
 
 app = Flask(__name__)
-app.secret_key = 'change_this_to_random_secret_key'
+app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_123')
 
 # --- CONFIGURATION ---
-# We use a public Piped instance. If this one is slow, find others online.
+# We use a public Piped instance. 
+# If music stops, change this URL to another one (e.g., https://pipedapi.kavin.rocks)
 PIPED_API_URL = "https://pipedapi.kavin.rocks"
 
+# Users (Username: Password)
 USERS = {
     "prazoon": "king123",
     "brother": "bro2026"
@@ -29,6 +32,11 @@ def login():
         return redirect(url_for('player'))
     return "Wrong password! <a href='/'>Try Again</a>"
 
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('index'))
+
 @app.route('/player')
 def player():
     if 'user' not in session: return redirect(url_for('index'))
@@ -39,22 +47,25 @@ def search():
     if 'user' not in session: return jsonify([])
     query = request.args.get('q')
     
-    # Use Piped API to search
     try:
+        # Ask Piped API for songs
         response = requests.get(f"{PIPED_API_URL}/search?q={query}&filter=music_songs")
         data = response.json()
-        # Clean up the data for our frontend
+        
         results = []
-        for item in data.get('items', [])[:10]: # Get top 10 results
-            results.append({
-                'title': item['title'],
-                'artist': item.get('uploaderName', 'Unknown'),
-                'thumbnail': item['thumbnail'],
-                'videoId': item['url'].split('=')[-1] # Extract ID
-            })
+        # Get top 15 results
+        for item in data.get('items', [])[:15]: 
+            # Only get items that have a URL (some don't)
+            if 'url' in item:
+                results.append({
+                    'title': item['title'],
+                    'artist': item.get('uploaderName', 'Unknown'),
+                    'thumbnail': item['thumbnail'],
+                    'videoId': item['url'].split('=')[-1]
+                })
         return jsonify(results)
     except Exception as e:
-        print(e)
+        print(f"Error: {e}")
         return jsonify([])
 
 @app.route('/get_stream')
@@ -62,16 +73,20 @@ def get_stream():
     if 'user' not in session: return "Unauthorized", 401
     video_id = request.args.get('id')
     
-    # Get the direct audio link from Piped
     try:
+        # Get audio links from Piped
         response = requests.get(f"{PIPED_API_URL}/streams/{video_id}")
         data = response.json()
         
-        # Find the best audio-only stream
+        # Find the best audio stream (m4a is best for web)
         for stream in data['audioStreams']:
             if stream['format'] == 'M4A':
                 return redirect(stream['url'])
                 
+        # If no M4A, take whatever is first
+        if data['audioStreams']:
+            return redirect(data['audioStreams'][0]['url'])
+            
         return "No audio found", 404
     except:
         return "Error fetching stream", 500
