@@ -6,17 +6,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_123')
 
 # --- CONFIGURATION ---
-# Try these URLs if search stops working. 
-# Just copy one and paste it into the PIPED_API_URL variable.
-
-# OPTION 1: (Usually reliable)
+# Current working API
 PIPED_API_URL = "https://pipedapi.tokhmi.xyz"
-
-# OPTION 2: (Backup)
-# PIPED_API_URL = "https://api.piped.privacy.com.de"
-
-# OPTION 3: (Official - often busy)
-# PIPED_API_URL = "https://pipedapi.kavin.rocks"
 
 USERS = {
     "prazoon": "king123",
@@ -52,8 +43,6 @@ def search():
     if 'user' not in session: return jsonify([])
     query = request.args.get('q')
     
-    print(f"Searching for: {query} on {PIPED_API_URL}") # Debug log
-    
     try:
         response = requests.get(f"{PIPED_API_URL}/search?q={query}&filter=music_songs", timeout=10)
         data = response.json()
@@ -81,12 +70,12 @@ def get_stream():
         response = requests.get(f"{PIPED_API_URL}/streams/{video_id}", timeout=10)
         data = response.json()
         
-        # Get M4A audio
+        # Try to find M4A first
         for stream in data['audioStreams']:
             if stream['format'] == 'M4A':
                 return redirect(stream['url'])
                 
-        # Fallback
+        # Fallback to any audio
         if data['audioStreams']:
             return redirect(data['audioStreams'][0]['url'])
             
