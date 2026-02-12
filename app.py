@@ -6,21 +6,26 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'super_secret_key_123')
 
 # --- CONFIGURATION ---
-# We use a public Piped instance. 
-# If music stops, change this URL to another one (e.g., https://pipedapi.kavin.rocks)
-PIPED_API_URL = "https://pipedapi.kavin.rocks"
+# Try these URLs if search stops working. 
+# Just copy one and paste it into the PIPED_API_URL variable.
 
-# Users (Username: Password)
+# OPTION 1: (Usually reliable)
+PIPED_API_URL = "https://pipedapi.tokhmi.xyz"
+
+# OPTION 2: (Backup)
+# PIPED_API_URL = "https://api.piped.privacy.com.de"
+
+# OPTION 3: (Official - often busy)
+# PIPED_API_URL = "https://pipedapi.kavin.rocks"
+
 USERS = {
     "prazoon": "king123",
     "brother": "bro2026"
 }
 
-# --- ROUTES ---
 @app.route('/')
 def index():
-    if 'user' in session:
-        return redirect(url_for('player'))
+    if 'user' in session: return redirect(url_for('player'))
     return render_template('login.html')
 
 @app.route('/login', methods=['POST'])
@@ -47,15 +52,14 @@ def search():
     if 'user' not in session: return jsonify([])
     query = request.args.get('q')
     
+    print(f"Searching for: {query} on {PIPED_API_URL}") # Debug log
+    
     try:
-        # Ask Piped API for songs
-        response = requests.get(f"{PIPED_API_URL}/search?q={query}&filter=music_songs")
+        response = requests.get(f"{PIPED_API_URL}/search?q={query}&filter=music_songs", timeout=10)
         data = response.json()
         
         results = []
-        # Get top 15 results
         for item in data.get('items', [])[:15]: 
-            # Only get items that have a URL (some don't)
             if 'url' in item:
                 results.append({
                     'title': item['title'],
@@ -65,7 +69,7 @@ def search():
                 })
         return jsonify(results)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"SEARCH ERROR: {e}")
         return jsonify([])
 
 @app.route('/get_stream')
@@ -74,16 +78,15 @@ def get_stream():
     video_id = request.args.get('id')
     
     try:
-        # Get audio links from Piped
-        response = requests.get(f"{PIPED_API_URL}/streams/{video_id}")
+        response = requests.get(f"{PIPED_API_URL}/streams/{video_id}", timeout=10)
         data = response.json()
         
-        # Find the best audio stream (m4a is best for web)
+        # Get M4A audio
         for stream in data['audioStreams']:
             if stream['format'] == 'M4A':
                 return redirect(stream['url'])
                 
-        # If no M4A, take whatever is first
+        # Fallback
         if data['audioStreams']:
             return redirect(data['audioStreams'][0]['url'])
             
