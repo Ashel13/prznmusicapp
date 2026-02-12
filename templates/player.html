@@ -5,34 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { background: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding-bottom: 120px; }
+        body { background: #121212; color: white; font-family: sans-serif; margin: 0; padding-bottom: 120px; }
         
-        /* Navigation */
-        .header { display: flex; justify-content: space-between; padding: 15px; align-items: center; background: #181818;}
-        .user-tag { font-size: 14px; color: #1DB954; font-weight: bold; }
+        /* Header */
+        .header { display: flex; justify-content: space-between; padding: 15px; background: #181818; border-bottom: 1px solid #333; }
+        .user-tag { color: #1DB954; font-weight: bold; }
         .logout { color: #888; text-decoration: none; font-size: 12px; border: 1px solid #444; padding: 5px 10px; border-radius: 15px; }
 
-        .nav { display: flex; padding: 10px 15px; gap: 15px; position: sticky; top: 0; background: #121212; z-index: 100; }
-        .nav button { flex: 1; padding: 10px; border-radius: 20px; border: none; background: #333; color: #fff; font-weight: bold; cursor: pointer; }
-        .nav button.active { background: #1DB954; color: black; }
+        /* Search Bar Area */
+        .search-container { display: flex; padding: 15px; gap: 10px; position: sticky; top: 0; background: #121212; z-index: 100; }
+        input { flex: 1; padding: 12px; border-radius: 8px; border: none; background: #2a2a2a; color: white; font-size: 16px; outline: none; }
+        .go-btn { background: #1DB954; color: black; border: none; border-radius: 8px; padding: 0 20px; font-weight: bold; cursor: pointer; }
 
-        /* Inputs */
-        .search-box { padding: 0 15px; }
-        input { width: 100%; padding: 15px; border-radius: 8px; border: none; background: #2a2a2a; color: white; box-sizing: border-box; font-size: 16px; outline: none; }
-
-        /* List */
-        .list { padding: 15px; }
-        .song-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #2a2a2a; }
-        .song-item img { width: 50px; height: 50px; border-radius: 4px; margin-right: 15px; object-fit: cover; cursor: pointer; }
-        .song-info { flex: 1; overflow: hidden; cursor: pointer; }
-        .song-info h4 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .song-info p { margin: 5px 0 0; font-size: 12px; color: #b3b3b3; }
-        .actions button { background: none; border: none; color: #888; padding: 10px; cursor: pointer; font-size: 18px; }
-        .actions button:hover { color: #1DB954; }
+        /* Song List */
+        .list { padding: 0 15px; }
+        .song-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #2a2a2a; cursor: pointer; }
+        .song-item:active { background: #222; }
+        .song-item img { width: 50px; height: 50px; border-radius: 4px; margin-right: 15px; object-fit: cover; }
+        .song-info { flex: 1; overflow: hidden; }
+        .song-info h4 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+        .song-info p { margin: 3px 0 0; font-size: 12px; color: #b3b3b3; }
 
         /* Player Bar */
         .player-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #181818; padding: 15px; border-top: 1px solid #282828; }
         audio { width: 100%; height: 35px; outline: none; }
+        
+        /* Loading Spinner */
+        #loading { text-align: center; color: #888; padding: 20px; display: none; }
     </style>
 </head>
 <body>
@@ -42,104 +41,68 @@
         <a href="/logout" class="logout">Log Out</a>
     </div>
 
-    <div class="nav">
-        <button id="btnSearch" class="active" onclick="switchTab('search')">Search</button>
-        <button id="btnLib" onclick="loadLibrary()">My Playlist</button>
+    <div class="search-container">
+        <input type="text" id="query" placeholder="Song or Artist...">
+        <button class="go-btn" onclick="doSearch()">GO</button>
     </div>
 
-    <div id="searchSection">
-        <div class="search-box">
-            <input type="text" id="query" placeholder="Search songs..." onchange="doSearch()">
-        </div>
-        <div id="searchResults" class="list"></div>
-    </div>
-
-    <div id="librarySection" class="list" style="display:none;"></div>
+    <div id="loading">Searching...</div>
+    <div id="searchResults" class="list"></div>
 
     <div class="player-bar">
         <audio id="audioPlayer" controls autoplay></audio>
     </div>
 
     <script>
-        let currentTab = 'search';
-
-        function switchTab(tab) {
-            currentTab = tab;
-            document.getElementById('searchSection').style.display = tab === 'search' ? 'block' : 'none';
-            document.getElementById('librarySection').style.display = tab === 'library' ? 'block' : 'none';
-            document.getElementById('btnSearch').className = tab === 'search' ? 'active' : '';
-            document.getElementById('btnLib').className = tab === 'library' ? 'active' : '';
-        }
-
         async function doSearch() {
             let q = document.getElementById('query').value;
             if(!q) return;
-            let res = await fetch('/search?q=' + q);
-            let data = await res.json();
-            renderList(data, 'searchResults', 'save');
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('searchResults').innerHTML = '';
+
+            try {
+                let res = await fetch('/search?q=' + encodeURIComponent(q));
+                let data = await res.json();
+                renderList(data);
+            } catch (err) {
+                alert("Search failed. Try again.");
+            }
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
         }
 
-        async function loadLibrary() {
-            switchTab('library');
-            let res = await fetch('/api/library');
-            let data = await res.json();
-            renderList(data, 'librarySection', 'delete');
-        }
-
-        async function saveSong(title, videoId, artist, thumbnail) {
-            let res = await fetch('/api/library', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title, videoId, artists: [{name: artist}], thumbnails: [{url: thumbnail}]})
-            });
-            let data = await res.json();
-            alert(data.message);
-        }
-
-        async function deleteSong(videoId) {
-            if(!confirm("Remove this song?")) return;
-            await fetch('/api/delete', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({videoId})
-            });
-            loadLibrary(); // Refresh the list
-        }
-
-        function renderList(songs, elementId, actionType) {
+        function renderList(songs) {
             let html = '';
+            if(songs.length === 0) html = '<p style="text-align:center; color:#555; margin-top:20px;">No results found.</p>';
+            
             songs.forEach(song => {
-                let img = song.thumbnails[1] ? song.thumbnails[1].url : song.thumbnails[0].url;
-                let artist = song.artists[0].name;
-                
-                let safeTitle = song.title.replace(/'/g, "\\'");
-                let safeArtist = artist.replace(/'/g, "\\'");
-                
-                let actionBtn = '';
-                if(actionType === 'save') {
-                    actionBtn = `<button onclick="saveSong('${safeTitle}', '${song.videoId}', '${safeArtist}', '${img}')"><i class="fas fa-plus-circle"></i></button>`;
-                } else {
-                    actionBtn = `<button onclick="deleteSong('${song.videoId}')" style="color:#d63031"><i class="fas fa-trash"></i></button>`;
-                }
-
                 html += `
-                <div class="song-item">
-                    <img src="${img}" onclick="play('${song.videoId}')">
-                    <div class="song-info" onclick="play('${song.videoId}')">
+                <div class="song-item" onclick="play('${song.videoId}')">
+                    <img src="${song.thumbnail}">
+                    <div class="song-info">
                         <h4>${song.title}</h4>
-                        <p>${artist}</p>
+                        <p>${song.artist}</p>
                     </div>
-                    <div class="actions">${actionBtn}</div>
                 </div>`;
             });
-            document.getElementById(elementId).innerHTML = html;
+            document.getElementById('searchResults').innerHTML = html;
         }
 
         function play(id) {
             let player = document.getElementById('audioPlayer');
-            player.src = '/stream?id=' + id;
-            player.play();
+            player.src = '/get_stream?id=' + id;
+            player.play().catch(e => console.log("Playback error:", e));
         }
+        
+        // Allow pressing "Enter" to search
+        document.getElementById("query").addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                doSearch();
+            }
+        });
     </script>
 </body>
 </html>
