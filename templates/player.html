@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Streamer</title>
+    <title>Prazoon Player</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background: #121212; color: white; font-family: sans-serif; margin: 0; padding-bottom: 120px; }
         
@@ -12,12 +11,12 @@
         .user-tag { color: #1DB954; font-weight: bold; }
         .logout { color: #888; text-decoration: none; font-size: 12px; border: 1px solid #444; padding: 5px 10px; border-radius: 15px; }
 
-        /* Search Bar Area */
+        /* Search Bar */
         .search-container { display: flex; padding: 15px; gap: 10px; position: sticky; top: 0; background: #121212; z-index: 100; }
         input { flex: 1; padding: 12px; border-radius: 8px; border: none; background: #2a2a2a; color: white; font-size: 16px; outline: none; }
         .go-btn { background: #1DB954; color: black; border: none; border-radius: 8px; padding: 0 20px; font-weight: bold; cursor: pointer; }
 
-        /* Song List */
+        /* List */
         .list { padding: 0 15px; }
         .song-item { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #2a2a2a; cursor: pointer; }
         .song-item:active { background: #222; }
@@ -26,11 +25,9 @@
         .song-info h4 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
         .song-info p { margin: 3px 0 0; font-size: 12px; color: #b3b3b3; }
 
-        /* Player Bar */
+        /* Player */
         .player-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #181818; padding: 15px; border-top: 1px solid #282828; }
         audio { width: 100%; height: 35px; outline: none; }
-        
-        /* Loading Spinner */
         #loading { text-align: center; color: #888; padding: 20px; display: none; }
     </style>
 </head>
@@ -43,7 +40,7 @@
 
     <div class="search-container">
         <input type="text" id="query" placeholder="Song or Artist...">
-        <button class="go-btn" onclick="doSearch()">GO</button>
+        <button class="go-btn" onclick="startSearch()">GO</button>
     </div>
 
     <div id="loading">Searching...</div>
@@ -54,54 +51,104 @@
     </div>
 
     <script>
-        async function doSearch() {
+        // --- THE ENGINE LIST (Your browser tries these directly) ---
+        const SERVERS = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.tokhmi.xyz",
+            "https://api.piped.privacy.com.de",
+            "https://pipedapi.drgns.space",
+            "https://pipedapi.smnz.de",
+            "https://pipedapi.moomoo.me"
+        ];
+
+        let currentServerIndex = 0;
+
+        // --- SMART FETCH FUNCTION ---
+        // Tries server 1. If it fails, tries server 2, etc.
+        async function fetchFromPiped(endpoint) {
+            for (let i = 0; i < SERVERS.length; i++) {
+                let server = SERVERS[(currentServerIndex + i) % SERVERS.length];
+                try {
+                    console.log("Trying server:", server);
+                    let res = await fetch(server + endpoint);
+                    if (res.ok) {
+                        currentServerIndex = (currentServerIndex + i) % SERVERS.length; 
+                        return await res.json();
+                    }
+                } catch (e) {
+                    console.log("Server failed, trying next...");
+                }
+            }
+            throw new Error("All servers failed");
+        }
+
+        async function startSearch() {
             let q = document.getElementById('query').value;
             if(!q) return;
             
-            // Show loading
             document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerText = "Searching...";
             document.getElementById('searchResults').innerHTML = '';
 
             try {
-                let res = await fetch('/search?q=' + encodeURIComponent(q));
-                let data = await res.json();
-                renderList(data);
+                // Fetch directly from Piped (Bypassing Render)
+                let data = await fetchFromPiped('/search?q=' + encodeURIComponent(q) + '&filter=music_songs');
+                renderList(data.items);
             } catch (err) {
-                alert("Search failed. Try again.");
+                document.getElementById('loading').innerText = "All servers are busy. Wait 1 min & try again.";
             }
             
-            // Hide loading
-            document.getElementById('loading').style.display = 'none';
+            if(document.getElementById('searchResults').innerHTML !== "") {
+                document.getElementById('loading').style.display = 'none';
+            }
         }
 
-        function renderList(songs) {
+        function renderList(items) {
             let html = '';
-            if(songs.length === 0) html = '<p style="text-align:center; color:#555; margin-top:20px;">No results found.</p>';
+            if(!items || items.length === 0) html = '<p style="text-align:center; color:#555; margin-top:20px;">No results found.</p>';
             
-            songs.forEach(song => {
-                html += `
-                <div class="song-item" onclick="play('${song.videoId}')">
-                    <img src="${song.thumbnail}">
-                    <div class="song-info">
-                        <h4>${song.title}</h4>
-                        <p>${song.artist}</p>
-                    </div>
-                </div>`;
+            items.forEach(item => {
+                if(item.url) {
+                    let videoId = item.url.split('=')[1];
+                    html += `
+                    <div class="song-item" onclick="play('${videoId}')">
+                        <img src="${item.thumbnail}">
+                        <div class="song-info">
+                            <h4>${item.title}</h4>
+                            <p>${item.uploaderName}</p>
+                        </div>
+                    </div>`;
+                }
             });
             document.getElementById('searchResults').innerHTML = html;
         }
 
-        function play(id) {
+        async function play(id) {
             let player = document.getElementById('audioPlayer');
-            player.src = '/get_stream?id=' + id;
-            player.play().catch(e => console.log("Playback error:", e));
+            player.style.opacity = "0.5"; // Dim player to show loading
+            
+            try {
+                let data = await fetchFromPiped('/streams/' + id);
+                
+                let audioUrl = "";
+                let m4a = data.audioStreams.find(s => s.format === 'M4A');
+                if (m4a) audioUrl = m4a.url;
+                else if (data.audioStreams.length > 0) audioUrl = data.audioStreams[0].url;
+
+                if (audioUrl) {
+                    player.src = audioUrl;
+                    player.play();
+                } else {
+                    alert("No audio stream found.");
+                }
+            } catch (e) {
+                alert("Could not load song. Try another.");
+            }
+            player.style.opacity = "1";
         }
         
-        // Allow pressing "Enter" to search
         document.getElementById("query").addEventListener("keyup", function(event) {
-            if (event.key === "Enter") {
-                doSearch();
-            }
+            if (event.key === "Enter") startSearch();
         });
     </script>
 </body>
